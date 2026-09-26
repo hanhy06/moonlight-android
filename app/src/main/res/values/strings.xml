@@ -303,4 +303,15 @@
     <string name="analogscroll_none">None (both sticks move the mouse)</string>
     <string name="analogscroll_right">Right analog stick</string>
     <string name="analogscroll_left">Left analog stick</string>
+    <string name="precision_touchpad_menu">Touchpad</string>
+    <string name="precision_touchpad_edit">Edit touchpad area</string>
+    <string name="precision_touchpad_keyboard">Show keyboard</string>
+    <string name="precision_touchpad_appearance">Touchpad appearance</string>
+    <string name="precision_touchpad_border">Show border</string>
+    <string name="precision_touchpad_opacity">Background opacity</string>
+    <string name="precision_touchpad_apply">Apply</string>
+    <string name="precision_touchpad_default">Default</string>
+    <string name="precision_touchpad_fullscreen">Full screen</string>
+    <string name="precision_touchpad_unavailable">This host cannot receive precision touchpad input. Use the matching Sunshine build on a supported Windows version.</string>
+    <string name="precision_touchpad_failed">Touchpad input could not be sent. The stream has been closed to release held contacts.</string>
 </resources>

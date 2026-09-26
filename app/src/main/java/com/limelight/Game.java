@@ -9,6 +9,9 @@ import com.limelight.binding.input.capture.InputCaptureManager;
 import com.limelight.binding.input.capture.InputCaptureProvider;
 import com.limelight.binding.input.touch.AbsoluteTouchContext;
 import com.limelight.binding.input.touch.RelativeTouchContext;
+import com.limelight.binding.input.touch.PrecisionTouchpadContext;
+import com.limelight.binding.input.touch.TouchpadAreaView;
+import com.limelight.binding.input.touch.TouchpadAreaSettings;
 import com.limelight.binding.input.driver.UsbDriverService;
 import com.limelight.binding.input.evdev.EvdevListener;
 import com.limelight.binding.input.touch.TouchContext;
@@ -96,6 +99,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     // Only 2 touches are supported
     private final TouchContext[] touchContextMap = new TouchContext[2];
+    private TouchpadAreaView touchpadArea;
+    private PrecisionTouchpadContext precisionTouchpad;
+    private TextView touchpadMenu;
+    private android.widget.LinearLayout touchpadEditBar;
     private long threeFingerDownTime = 0;
 
     private static final int REFERENCE_HORIZ_RES = 1280;
@@ -431,6 +438,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             // of gamepads removed and replugged at runtime.
             gamepadMask = 1;
         }
+        if (prefConfig.touchscreenTrackpad) {
+            initializePrecisionTouchpad();
+        }
+
         if (prefConfig.onscreenController) {
             // If we're using OSC, always set at least gamepad 1.
             gamepadMask |= 1;
@@ -741,6 +752,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus && precisionTouchpad != null) precisionTouchpad.cancel();
 
         // We can't guarantee the state of modifiers keys which may have
         // lifted while focus was not on us. Clear the modifier state.
@@ -1062,6 +1074,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     @Override
     protected void onPause() {
+        if (precisionTouchpad != null) precisionTouchpad.cancel();
         if (isFinishing()) {
             // Stop any further input device notifications before we lose focus (and pointer capture)
             if (controllerHandler != null) {
@@ -1485,6 +1498,93 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         conn.sendUtf8Text(event.getCharacters());
         return true;
+    }
+
+    private void initializePrecisionTouchpad() {
+        FrameLayout parent = (FrameLayout) streamView.getParent();
+        // Keep a multi-finger gesture together across the video/letterbox boundary.
+        parent.setMotionEventSplittingEnabled(false);
+        touchpadArea = new TouchpadAreaView(this);
+        touchpadArea.setVisibility(View.GONE);
+        parent.addView(touchpadArea, new FrameLayout.LayoutParams(-1, -1));
+        precisionTouchpad = new PrecisionTouchpadContext(conn, touchpadArea, () -> {
+            Toast.makeText(this, R.string.precision_touchpad_failed, Toast.LENGTH_LONG).show();
+            stopConnection(); // Disconnect also releases any contacts already held by the host.
+            finish();
+        });
+        touchpadArea.setAreaChangeListener(() -> precisionTouchpad.cancel());
+
+        int padding = (int)(12 * getResources().getDisplayMetrics().density);
+        touchpadMenu = new TextView(this);
+        touchpadMenu.setText(R.string.precision_touchpad_menu);
+        touchpadMenu.setTextColor(android.graphics.Color.WHITE);
+        touchpadMenu.setBackgroundColor(0xB0202020);
+        touchpadMenu.setPadding(padding, padding, padding, padding);
+        touchpadMenu.setOnClickListener(v -> showTouchpadMenu());
+        FrameLayout.LayoutParams menuLayout = new FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL);
+        parent.addView(touchpadMenu, menuLayout);
+
+        touchpadEditBar = new android.widget.LinearLayout(this);
+        touchpadEditBar.setBackgroundColor(0xE0202020);
+        int[] labels = {R.string.precision_touchpad_apply, android.R.string.cancel,
+                R.string.precision_touchpad_default, R.string.precision_touchpad_fullscreen};
+        for (int i = 0; i < labels.length; i++) {
+            final int action = i;
+            android.widget.Button button = new android.widget.Button(this);
+            button.setText(labels[i]);
+            button.setOnClickListener(v -> {
+                if (action == 2) touchpadArea.resetToDefault();
+                else if (action == 3) touchpadArea.resetToFullscreen();
+                else {
+                    if (action == 0) touchpadArea.applyEdit();
+                    else touchpadArea.cancelEdit();
+                    touchpadEditBar.setVisibility(View.GONE);
+                    touchpadMenu.setVisibility(View.VISIBLE);
+                    if (virtualController != null) virtualController.show();
+                }
+            });
+            touchpadEditBar.addView(button, new android.widget.LinearLayout.LayoutParams(0, -2, 1));
+        }
+        touchpadEditBar.setVisibility(View.GONE);
+        parent.addView(touchpadEditBar, new FrameLayout.LayoutParams(-1, -2, android.view.Gravity.TOP));
+    }
+
+    private void showTouchpadMenu() {
+        precisionTouchpad.cancel();
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.precision_touchpad_menu)
+                .setItems(new CharSequence[]{getString(R.string.precision_touchpad_edit),
+                        getString(R.string.precision_touchpad_keyboard), getString(R.string.precision_touchpad_appearance)}, (dialog, item) -> {
+                    if (item == 0) {
+                        touchpadArea.setVisibility(View.VISIBLE);
+                        touchpadArea.setEditing(true);
+                        touchpadArea.bringToFront();
+                        touchpadEditBar.bringToFront();
+                        touchpadEditBar.setVisibility(View.VISIBLE);
+                        touchpadMenu.setVisibility(View.GONE);
+                        if (virtualController != null) virtualController.hide();
+                    } else if (item == 1) {
+                        toggleKeyboard();
+                    } else {
+                        android.widget.LinearLayout content = new android.widget.LinearLayout(this);
+                        content.setOrientation(android.widget.LinearLayout.VERTICAL);
+                        android.widget.CheckBox border = new android.widget.CheckBox(this);
+                        border.setText(R.string.precision_touchpad_border);
+                        border.setChecked(TouchpadAreaSettings.isBorderVisible(this));
+                        android.widget.TextView opacityLabel = new android.widget.TextView(this);
+                        opacityLabel.setText(R.string.precision_touchpad_opacity);
+                        android.widget.SeekBar opacity = new android.widget.SeekBar(this);
+                        opacity.setMax(100);
+                        opacity.setProgress(Math.round(TouchpadAreaSettings.getBackgroundOpacity(this) * 100));
+                        content.addView(border);
+                        content.addView(opacityLabel);
+                        content.addView(opacity);
+                        new android.app.AlertDialog.Builder(this).setTitle(R.string.precision_touchpad_appearance)
+                                .setView(content).setNegativeButton(android.R.string.cancel, null)
+                                .setPositiveButton(R.string.precision_touchpad_apply, (d, which) ->
+                                        touchpadArea.setAppearance(border.isChecked(), opacity.getProgress() / 100f)).show();
+                    }
+                }).show();
     }
 
     private TouchContext getTouchContext(int actionIndex)
@@ -2002,6 +2102,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
                 // If this is the parent view, we'll offset our coordinates to appear as if they
                 // are relative to the StreamView like our StreamView touch events are.
+                if (precisionTouchpad != null) {
+                    return precisionTouchpad.handle(view, event);
+                }
                 float xOffset, yOffset;
                 if (view != streamView && !prefConfig.touchscreenTrackpad) {
                     xOffset = -streamView.getX();
@@ -2413,6 +2516,14 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
                 connected = true;
                 connecting = false;
+                if (precisionTouchpad != null) {
+                    boolean supported = (MoonBridge.getHostFeatureFlags() & 0x04) != 0;
+                    precisionTouchpad.setEnabled(supported);
+                    touchpadArea.setVisibility(supported ? View.VISIBLE : View.GONE);
+                    if (!supported) {
+                        Toast.makeText(Game.this, R.string.precision_touchpad_unavailable, Toast.LENGTH_LONG).show();
+                    }
+                }
                 updatePipAutoEnter();
 
                 // Hide the mouse cursor now after a short delay.
