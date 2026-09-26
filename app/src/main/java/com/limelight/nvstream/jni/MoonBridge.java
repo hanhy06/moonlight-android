@@ -368,6 +368,10 @@ public class MoonBridge {
                                     short leftStickX, short leftStickY,
                                     short rightStickX, short rightStickY);
 
+    public static native int getHostFeatureFlags();
+
+    public static native int sendPrecisionTouchpadFrame(int sequence, int time, int width, int height, int command, int[] contacts);
+
     public static native int sendTouchEvent(byte eventType, int pointerId, float x, float y, float pressure,
                                             float contactAreaMajor, float contactAreaMinor, short rotation);
 

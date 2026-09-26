@@ -10,6 +10,26 @@
 #include "controller_type.h"
 #include "controller_list.h"
 
+int LiSendPrecisionTouchpadFrame(uint32_t sequence, uint32_t time, uint32_t width, uint32_t height,
+                                uint8_t command, uint8_t count, const uint32_t* contacts);
+
+JNIEXPORT jint JNICALL
+Java_com_limelight_nvstream_jni_MoonBridge_getHostFeatureFlags(JNIEnv *env, jclass clazz) {
+    return LiGetHostFeatureFlags();
+}
+
+JNIEXPORT jint JNICALL
+Java_com_limelight_nvstream_jni_MoonBridge_sendPrecisionTouchpadFrame(JNIEnv *env, jclass clazz,
+        jint sequence, jint time, jint width, jint height, jint command, jintArray contacts) {
+    if (contacts == NULL) return -1;
+    jsize length = (*env)->GetArrayLength(env, contacts);
+    if (length > 15 || length % 3 != 0 || command < 1 || command > 2) return -1;
+    jint data[15];
+    (*env)->GetIntArrayRegion(env, contacts, 0, length, data);
+    if ((*env)->ExceptionCheck(env)) return -1;
+    return LiSendPrecisionTouchpadFrame(sequence, time, width, height, command, length / 3, (uint32_t*)data);
+}
+
 JNIEXPORT void JNICALL
 Java_com_limelight_nvstream_jni_MoonBridge_sendMouseMove(JNIEnv *env, jclass clazz, jshort deltaX, jshort deltaY) {
     LiSendMouseMoveEvent(deltaX, deltaY);

@@ -527,6 +527,11 @@ public class NvConnection {
         }
     }
 
+    public int sendPrecisionTouchpadFrame(int sequence, int time, int width, int height, int command, int[] contacts) {
+        return isMonkey ? MoonBridge.LI_ERR_UNSUPPORTED :
+                MoonBridge.sendPrecisionTouchpadFrame(sequence, time, width, height, command, contacts);
+    }
+
     public int sendTouchEvent(byte eventType, int pointerId, float x, float y, float pressureOrDistance,
                               float contactAreaMajor, float contactAreaMinor, short rotation) {
         if (!isMonkey) {
